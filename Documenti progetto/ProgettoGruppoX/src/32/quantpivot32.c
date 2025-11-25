@@ -56,7 +56,7 @@ void quantizzazione(int *vplus, int *vminus, float *v, int D, int x){
         }
     }
 
-    // assegna 1 in vplus o vminus a seconda del segno dei top x valori
+    // Infine assegno 1 in vplus o vminus a seconda del segno dei top x valori
     for(int k = 0; k < top_count; k++){
         int idx = top_idx[k];
         if(v[idx] > 0)
