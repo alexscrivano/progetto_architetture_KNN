@@ -130,13 +130,29 @@ void selezione_pivot(int h, float **insiemePivot, float **dset, int H){
 
 }
 
-// aggiungere funzione di indicizzazione tramite pivot
+void indexing(float **insiemePivot, float **dset, int **index, int D, int x, int P, int H){ // ottimizzabile con la questione della vettorizzazione della matrice
+
+    // indicizzazione delle distanze approssimate dei punti del dataset da ciascun pivot
+
+    for(int p = 0; p < P; p++){
+        float *pivot = insiemePivot[p];
+        int *row = index[p];
+        for(int i = 0; i < H; i++){
+            int dist = approx_dist(pivot,dset[i],D,x);
+            index[i] = dist;
+        }
+    }
+
+}
 
 
 void fit(params* input){
     // Selezione dei pivot
     // Costruzione dell'indice
     input->index = _mm_malloc(8*sizeof(type), align);
+
+
+
 }
 
 void predict(params* input){
