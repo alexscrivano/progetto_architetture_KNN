@@ -74,8 +74,6 @@ void quantizzazione(int *vplus, int *vminus, float *v, int D, int x){
     }
 }
 
-
-
 int approx_dist(float *w, float *v, int D, int x){ 
     
     // calcola della quantizzazione dei due vettori
@@ -110,18 +108,35 @@ int scalar_prod(int *vett1, int *vett2, int D){ //ottimizzabile in assembly face
 
 }
 
+void selezione_pivot(int h, float **insiemePivot, float **dset, int H){ 
 
+    if(h <= 0 || h >= H){
+        fprintf(stderr,"Errore nel numero di pivot h\n");
+        exit(1);
+    }
 
+    // selezione dei punti pivot casualmente
+
+    int index = 0;
+
+    int step = H/h;
+
+    while (index < h){
+        int i = step * index;
+        insiemePivot[index] = dset[i];
+        index ++;
+    }
+    
+
+}
+
+// aggiungere funzione di indicizzazione tramite pivot
 
 
 void fit(params* input){
     // Selezione dei pivot
     // Costruzione dell'indice
     input->index = _mm_malloc(8*sizeof(type), align);
-
-
-
-
 }
 
 void predict(params* input){
