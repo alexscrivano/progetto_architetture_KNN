@@ -24,8 +24,16 @@ void quantizzazione(int *vplus, int *vminus, float *v, int D, int x){
         vminus[i] = 0;
     }
 
+    /*
     int top_idx[x];      // indici dei top x valori
     float top_val[x];    // valori assoluti corrispondenti
+    */
+
+    // versione safe per allocazione vettori
+
+    int *top_idx = malloc(x*sizeof(int));
+    float *top_val = malloc(x*sizeof(float));
+
     int top_count = 0;   // contatore dei top valori trovati finora
     int min_pos = -1;    // indice del minimo tra top x (per sapere quale sostituire quando trovo un nuovo massimo)
 
