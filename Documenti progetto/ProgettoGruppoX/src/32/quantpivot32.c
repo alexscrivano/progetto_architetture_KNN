@@ -20,12 +20,20 @@ void quantizzazione(int *vplus, int *vminus, float *v, int D, int x){
     }
 
     for(int i = 0; i < D; i++){
-    vplus[i] = 0;
-    vminus[i] = 0;
-}
+        vplus[i] = 0;
+        vminus[i] = 0;
+    }
 
+    /*
     int top_idx[x];      // indici dei top x valori
     float top_val[x];    // valori assoluti corrispondenti
+    */
+
+    // versione safe per allocazione vettori
+
+    int *top_idx = malloc(x*sizeof(int));
+    float *top_val = malloc(x*sizeof(float));
+
     int top_count = 0;   // contatore dei top valori trovati finora
     int min_pos = -1;    // indice del minimo tra top x (per sapere quale sostituire quando trovo un nuovo massimo)
 
@@ -65,6 +73,44 @@ void quantizzazione(int *vplus, int *vminus, float *v, int D, int x){
             vminus[idx] = 1;
     }
 }
+
+
+
+int approx_dist(float *w, float *v, int D, int x){ 
+    
+    // calcola della quantizzazione dei due vettori
+
+    int *vplus = malloc(D*sizeof(int));
+    int *vminus = malloc(D*sizeof(int));
+    int *wplus = malloc(D*sizeof(int));
+    int *wminus = malloc(D*sizeof(int));
+    
+    quantizzazione(vplus,vminus,v,D,x);
+    quantizzazione(wplus,wminus,w,D,x);
+
+    // calcolo della distanza approssimativa tra i due vettori
+
+    int approx_dist = scalar_prod(vplus,wplus,D)+scalar_prod(vminus,wminus,D)-scalar_prod(vplus,wminus,D)-scalar_prod(vminus,wplus,D);
+
+    return approx_dist;
+
+}
+
+int scalar_prod(int *vett1, int *vett2, int D){ //ottimizzabile in assembly facendo operazioni parallele
+    
+    // calcolo del prodotto scalare tra due vettori
+
+    int s = 0;
+
+    for(int i = 0; i < D; i++){
+        s = s + (vett1[i]*vett2[i]);
+    }
+
+    return s;
+
+}
+
+
 
 
 
