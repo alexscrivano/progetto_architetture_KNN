@@ -7,7 +7,7 @@
 
 extern void prova(params* input);
 
-void quantizzazione(int *vplus, int *vminus, float *v, int D, int x){
+void quantizzazione(int *vplus, int *vminus, type *v, int D, int x){
 
     if(D <= 0){
         fprintf(stderr, "Errore nel parametro dimensione D\n");
@@ -32,13 +32,13 @@ void quantizzazione(int *vplus, int *vminus, float *v, int D, int x){
     // versione safe per allocazione vettori
 
     int *top_idx = malloc(x*sizeof(int));
-    float *top_val = malloc(x*sizeof(float));
+    type *top_val = malloc(x*sizeof(type));
 
     int top_count = 0;   // contatore dei top valori trovati finora
     int min_pos = -1;    // indice del minimo tra top x (per sapere quale sostituire quando trovo un nuovo massimo)
 
     for(int i = 0; i < D; i++){
-        float abs_val = fabs(v[i]);
+        type abs_val = fabs(v[i]);
             //se non ho ancora trovato x valori parziali
         if(top_count < x){
             // riempio inizialmente con i primi x valori
@@ -54,7 +54,7 @@ void quantizzazione(int *vplus, int *vminus, float *v, int D, int x){
 
             // aggiorno anche min_pos per il prossimo giro
             min_pos = 0;
-            float min_val = top_val[0];
+            type min_val = top_val[0];
             for(int j = 1; j < x; j++){
                 if(top_val[j] < min_val){
                     min_val = top_val[j];
@@ -72,6 +72,9 @@ void quantizzazione(int *vplus, int *vminus, float *v, int D, int x){
         else if(v[idx] < 0)
             vminus[idx] = 1;
     }
+
+    free(top_idx);
+    free(top_val);
 }
 
 int approx_dist(float *w, float *v, int D, int x){ 
@@ -82,6 +85,11 @@ int approx_dist(float *w, float *v, int D, int x){
     int *vminus = malloc(D*sizeof(int));
     int *wplus = malloc(D*sizeof(int));
     int *wminus = malloc(D*sizeof(int));
+
+    if (!vplus || !vminus || !wplus || !wminus) {
+        fprintf(stderr, "Errore malloc in approx_dist\n");
+        exit(1);
+    }
     
     quantizzazione(vplus,vminus,v,D,x);
     quantizzazione(wplus,wminus,w,D,x);
@@ -89,6 +97,11 @@ int approx_dist(float *w, float *v, int D, int x){
     // calcolo della distanza approssimativa tra i due vettori
 
     int approx_dist = scalar_prod(vplus,wplus,D)+scalar_prod(vminus,wminus,D)-scalar_prod(vplus,wminus,D)-scalar_prod(vminus,wplus,D);
+
+    free(vplus);
+    free(vminus);
+    free(wplus);
+    free(wminus);
 
     return approx_dist;
 
@@ -108,9 +121,12 @@ int scalar_prod(int *vett1, int *vett2, int D){ //ottimizzabile in assembly face
 
 }
 
-void selezione_pivot(int h, float **insiemePivot, float **dset, int H){ 
+void selezione_pivot(params *input){ 
 
-    if(h <= 0 || h >= H){
+    int h = input->h;
+    int N = input->N;
+    
+    if(h <= 0 || h >= N){
         fprintf(stderr,"Errore nel numero di pivot h\n");
         exit(1);
     }
@@ -119,40 +135,80 @@ void selezione_pivot(int h, float **insiemePivot, float **dset, int H){
 
     int index = 0;
 
-    int step = H/h;
+    int step = N/h;
 
     while (index < h){
         int i = step * index;
-        insiemePivot[index] = dset[i];
+        //insiemePivot[index] = dset[i];
+        input->P[index] = input->DS[i];
         index ++;
     }
     
-
-}
-
-void indexing(float **insiemePivot, float **dset, int **index, int D, int x, int P, int H){ // ottimizzabile con la questione della vettorizzazione della matrice
-
-    // indicizzazione delle distanze approssimate dei punti del dataset da ciascun pivot
-
-    for(int p = 0; p < P; p++){
-        float *pivot = insiemePivot[p];
-        int *row = index[p];
-        for(int i = 0; i < H; i++){
-            int dist = approx_dist(pivot,dset[i],D,x);
-            index[i] = dist;
-        }
+    if (!input->silent) {
+        printf("Selezionati %d pivot (step=%d)\n", h, step);
     }
 
 }
 
+void indexing(params *input){ // ottimizzabile con la questione della vettorizzazione della matrice
+
+    // indicizzazione delle distanze approssimate dei punti del dataset da ciascun pivot
+
+    int P = input->h;
+    int N = input->N;
+    int D = input->D;
+    int x = input->x;
+
+    for(int p = 0; p < P; p++){
+        type *pivot = input->P + (size_t)p*D;
+        type *row = input->index + (size_t)p*N;
+        for(int i = 0; i < N; i++){
+
+            type *dset_row = input->DS + (size_t)i *D;
+
+            int dist = approx_dist(pivot,dset_row,D,x);
+            row[i] = (type)dist;
+        }
+    }
+
+    if (!input->silent) {
+        printf("Costruito indice pivot (%d pivot x %d punti)\n", P, N);
+    }
+
+}
 
 void fit(params* input){
     // Selezione dei pivot
+    int **index = input->index;
     // Costruzione dell'indice
-    input->index = _mm_malloc(8*sizeof(type), align);
+    
+    if(input->DS || input->N <= 0 || input->D <= 0){
+        fprintf(stderr, "DS non inizializzato correttamente\n");
+        exit(1);
+    }
+    if (!input->P || input->h <= 0) {
+        fprintf(stderr, "Vettore P (pivot) non allocato o h non valido\n");
+        exit(1);
+    }
+    
+    size_t index_size = (size_t)input->h * input->N * sizeof(type);
+    input->index = _mm_malloc(index_size, align);
 
+    if (!input->index) {
+        fprintf(stderr, "Errore allocazione index (%zu bytes)\n", index_size);
+        exit(1);
+    }
 
+    if (!input->silent) {
+        printf("Inizio funzione FIT: selezione pivot + costruzione indice\n");
+    }
 
+    selezione_pivot(input);
+    indexing(input);
+
+    if (!input->silent) {
+        printf("FIT completato\n");
+    }
 }
 
 void predict(params* input){
