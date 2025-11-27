@@ -77,7 +77,7 @@ void quantizzazione(int *vplus, int *vminus, type *v, int D, int x){
     free(top_val);
 }
 
-int approx_dist(float *w, float *v, int D, int x){ 
+type approx_dist(float *w, float *v, int D, int x){ 
     
     // calcola della quantizzazione dei due vettori
 
@@ -96,7 +96,7 @@ int approx_dist(float *w, float *v, int D, int x){
 
     // calcolo della distanza approssimativa tra i due vettori
 
-    int approx_dist = scalar_prod(vplus,wplus,D)+scalar_prod(vminus,wminus,D)-scalar_prod(vplus,wminus,D)-scalar_prod(vminus,wplus,D);
+    type approx_dist = scalar_prod(vplus,wplus,D)+scalar_prod(vminus,wminus,D)-scalar_prod(vplus,wminus,D)-scalar_prod(vminus,wplus,D);
 
     free(vplus);
     free(vminus);
@@ -121,7 +121,7 @@ int scalar_prod(int *vett1, int *vett2, int D){ //ottimizzabile in assembly face
 
 }
 
-void selezione_pivot(params *input){ 
+void selezione_pivot(params* input){ 
 
     int h = input->h;
     int N = input->N;
@@ -150,7 +150,7 @@ void selezione_pivot(params *input){
 
 }
 
-void indexing(params *input){ // ottimizzabile con la questione della vettorizzazione della matrice
+void indexing(params* input){ // ottimizzabile con la questione della vettorizzazione della matrice
 
     // indicizzazione delle distanze approssimate dei punti del dataset da ciascun pivot
 
@@ -179,7 +179,6 @@ void indexing(params *input){ // ottimizzabile con la questione della vettorizza
 
 void fit(params* input){
     // Selezione dei pivot
-    int **index = input->index;
     // Costruzione dell'indice
     
     if(input->DS || input->N <= 0 || input->D <= 0){
@@ -211,8 +210,94 @@ void fit(params* input){
     }
 }
 
+
+
+
+
+
+
+
+void querying(params* input, type* q){ // ottimizzabile con la vettorizzazione delle matrici in assembly
+    
+    // inizializzazione dei KNN di q
+    int k = input->k;
+    int nq = input->nq;
+    int N = input->N;
+
+    for(int i = 0; i < k; i++){
+        input->id_nn[i] = -1;
+    }
+
+    for(int i = 0; i < nq*k; i++){
+        input->dist_nn[i] = INFINITY;
+    }
+
+    int P = input->h;
+    int D = input->D;
+
+    // calcolo delle distanze approssimate di ciascun pivot dal punto di query q
+
+    type* distanze_app = malloc(P*sizeof(type));
+
+    for(int i = 0; i < P; i++){
+        type *pivot = input->P + (size_t)i*D;
+        distanze_app[i] = approx_dist(q,pivot,D,input->x);
+    }
+
+    int N = input->N;
+    type* index = input->index;
+
+    for(int v = 0; v < N; v++){
+        type* row = input->DS + (size_t)v*D;
+        type dpvt = max_distance(distanze_app, index); //ottimizzabile con calcolo in parallelo su assembly
+        type dmax = calcola(); //TODO (DA DEFINIRE)
+        if(dpvt<dmax){
+            type dist = approx_dist(row,q,D,input->x); //TODO (DA DEFINIRE)
+            if(dist < dmax){
+                aggiornaKNN(input->dist_nn,input->id_nn); //TODO (DA DEFINIRE)
+            }
+        }    
+    }
+
+    for(int i = 0; i < k; i++){
+        int* id = input->id_nn + (size_t)i;
+        type* vid = input->DS + (size_t)id * D;
+        
+        type delta = calcola_distanza(q,vid); //TODO (DA DEFINIRE)
+        input->dist_nn[i*nq] = delta;
+    }
+
+    free(distanze_app);
+
+}
+
+
+
 void predict(params* input){
     // Esecuzione delle query
+
+    /*
     input->id_nn[1] = 5;
     prova(input);
+    */
+
+    // allocare le strutture di interesse (id_nn, dist_nn, ...)
+
+    int nq = input->nq;
+    int D = input->D;
+
+    if (!input->silent) {
+        printf("Inizio funzione PREDICT: ricerca dei KNN per ciascun punto di query q\n");
+    }
+
+    for(int i = 0; i < nq; i++){
+        type* q = input->Q + (size_t)i * D;
+        querying(input,q);
+        stampa_vicini(input); // TODO (DA DEFINIRE, stampa i KNN per ciascun punto di query q)
+    }
+    
+    if (!input->silent) {
+        printf("PREDICT completato\n");
+    }
+
 }
