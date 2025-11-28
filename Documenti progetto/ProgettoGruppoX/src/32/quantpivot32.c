@@ -121,7 +121,7 @@ int scalar_prod(int *vett1, int *vett2, int D){ //ottimizzabile in assembly face
 
 }
 
-void selezione_pivot(params* input){ 
+void selezione_pivot(params* input){
 
     int h = input->h;
     int N = input->N;
@@ -140,7 +140,7 @@ void selezione_pivot(params* input){
     while (index < h){
         int i = step * index;
         //insiemePivot[index] = dset[i];
-        input->P[index] = input->DS[i];
+        input->P[index] = i;//input->DS[i];
         index ++;
     }
     
@@ -210,13 +210,7 @@ void fit(params* input){
     }
 }
 
-
-
-
-
-
-
-
+/*
 void querying(params* input, type* q){ // ottimizzabile con la vettorizzazione delle matrici in assembly
     
     // inizializzazione dei KNN di q
@@ -271,6 +265,86 @@ void querying(params* input, type* q){ // ottimizzabile con la vettorizzazione d
 
 }
 
+*/
+
+
+
+
+void querying(params *input, type *q, int q_index){
+
+    int k = input->k;
+    int h = input->h;
+    int N = input->N;
+    int D = input->D;
+    int x = input->x;
+
+    type *DS = input->DS;
+    type *Q = input->Q;
+    type *index = input->index;
+    int *P = input->P;
+
+    int *id_nn_q = input->id_nn + (size_t)q_index * k;
+    type *dist_nn_q = input->dist_nn + (size_t)q_index * k;
+
+    // inizializzo i KNN di q a coppie (-1,inf)
+
+    for(int id = 0; id < k; id++){
+        id_nn_q[id] = -1;
+        dist_nn_q[id] = INFINITY; 
+    }
+
+    type *dist_nn_pivot = malloc(h*sizeof(type));   
+    if(!dist_nn_pivot){
+        fprintf(stderr, "Errore nell'allocazione del vettore per le distanze dai pivot in querying (dist_piv_q)\n");
+        exit(1);
+    }
+
+    // calcolo delle distanze di q da tutti i pivot
+
+    for(int p = 0; p < h; p++){
+        int indice_pivot = P[p];
+        type *pivot = DS + (size_t)indice_pivot * D;
+        dist_nn_pivot[p] = approx_dist(pivot,q,D,x);
+    }
+    
+    for(int v = 0; v < N; v++){
+
+        type lower_bound = 0.0;
+
+        //calcolo del lower bound della distanza
+        for(int p = 0; p < h; p++){
+            type distp = index[v+(size_t)p*N];
+            type distq = dist_nn_pivot[p];
+            type diff = fabs(distp - distq);
+            if(diff > lower_bound){
+                lower_bound = diff;
+            }
+        }
+
+        // selezione del vicino a distanza maggiore
+        type dmax = dist_nn_pivot[k-1];
+
+        if(lower_bound < dmax){
+            type *v_vec = DS + (size_t)v*D;
+            type dapp = approx_dist(v_vec,q,D,x);
+            if (dmax > dapp){
+                insert_nn(); //TODO (da definire)
+            }
+        }
+
+        for(int i = 0; i < k; i++){
+            int id = id_nn_q[i];
+            if(id > 0){
+                type *v_vec = DS + (size_t)i * D;
+                type real_dist = distanza(q,v_vec, D); //TODO (da definire)
+                dist_nn_q[i] = real_dist;
+            }
+        }
+    }
+
+    free(dist_nn_pivot);
+
+}
 
 
 void predict(params* input){
@@ -292,9 +366,10 @@ void predict(params* input){
 
     for(int i = 0; i < nq; i++){
         type* q = input->Q + (size_t)i * D;
-        querying(input,q);
-        stampa_vicini(input); // TODO (DA DEFINIRE, stampa i KNN per ciascun punto di query q)
+        querying(input,q,i);
     }
+
+    stampa_vicini(input); // TODO (DA DEFINIRE, stampa i KNN per ciascun punto di query q)
     
     if (!input->silent) {
         printf("PREDICT completato\n");
