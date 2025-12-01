@@ -269,6 +269,17 @@ void querying(params* input, type* q){ // ottimizzabile con la vettorizzazione d
 
 
 
+type distanza(type *v, type *w, int D){ // ottimizzabile in assembly
+    type distanza = 0;
+    // calcolo delle distanze al quadrato
+    for(int i = 0; i < D; i++){
+        distanza += pow((v[i] - w[i]),2);
+    }
+    // calcolo della radice della distanza
+    distanza = sqrt(distanza);
+    return distanza;
+}
+
 
 void querying(params *input, type *q, int q_index){
 
