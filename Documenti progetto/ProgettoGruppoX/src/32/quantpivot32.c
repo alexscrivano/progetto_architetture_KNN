@@ -67,7 +67,7 @@ void quantizzazione(int *vplus, int *vminus, type *v, int D, int x){
     // Infine assegno 1 in vplus o vminus a seconda del segno dei top x valori
     for(int k = 0; k < top_count; k++){
         int idx = top_idx[k];
-        if(v[idx] > 0)
+        if(v[idx] >= 0)
             vplus[idx] = 1;
         else if(v[idx] < 0)
             vminus[idx] = 1;
@@ -77,7 +77,7 @@ void quantizzazione(int *vplus, int *vminus, type *v, int D, int x){
     free(top_val);
 }
 
-type approx_dist(float *w, float *v, int D, int x){ 
+type approx_dist(type *w, type *v, int D, int x){ 
     
     // calcola della quantizzazione dei due vettori
 
@@ -140,7 +140,7 @@ void selezione_pivot(params* input){
     while (index < h){
         int i = step * index;
         //insiemePivot[index] = dset[i];
-        input->P[index] = i;//input->DS[i];
+        input->P[index] = i;//input->DS[i]; //input->P + (size_t)p*D;
         index ++;
     }
     
@@ -160,14 +160,14 @@ void indexing(params* input){ // ottimizzabile con la questione della vettorizza
     int x = input->x;
 
     for(int p = 0; p < P; p++){
-        type *pivot = input->P + (size_t)p*D;
+        int idx_pivot = input->P[p];                   // indice nel DS
+        type *pivot   = input->DS + (size_t)idx_pivot * D;
         type *row = input->index + (size_t)p*N;
         for(int i = 0; i < N; i++){
 
             type *dset_row = input->DS + (size_t)i *D;
 
-            int dist = approx_dist(pivot,dset_row,D,x);
-            row[i] = (type)dist;
+            row[i] = approx_dist(pivot,dset_row,D,x);
         }
     }
 
@@ -181,7 +181,7 @@ void fit(params* input){
     // Selezione dei pivot
     // Costruzione dell'indice
     
-    if(input->DS || input->N <= 0 || input->D <= 0){
+    if(!input->DS || input->N <= 0 || input->D <= 0){
         fprintf(stderr, "DS non inizializzato correttamente\n");
         exit(1);
     }
@@ -244,11 +244,11 @@ void querying(params* input, type* q){ // ottimizzabile con la vettorizzazione d
     for(int v = 0; v < N; v++){
         type* row = input->DS + (size_t)v*D;
         type dpvt = max_distance(distanze_app, index); //ottimizzabile con calcolo in parallelo su assembly
-        type dmax = calcola(); //TODO (DA DEFINIRE)
+        type dmax = calcola(); 
         if(dpvt<dmax){
-            type dist = approx_dist(row,q,D,input->x); //TODO (DA DEFINIRE)
+            type dist = approx_dist(row,q,D,input->x); 
             if(dist < dmax){
-                aggiornaKNN(input->dist_nn,input->id_nn); //TODO (DA DEFINIRE)
+                aggiornaKNN(input->dist_nn,input->id_nn); 
             }
         }    
     }
@@ -257,7 +257,7 @@ void querying(params* input, type* q){ // ottimizzabile con la vettorizzazione d
         int* id = input->id_nn + (size_t)i;
         type* vid = input->DS + (size_t)id * D;
         
-        type delta = calcola_distanza(q,vid); //TODO (DA DEFINIRE)
+        type delta = calcola_distanza(q,vid);
         input->dist_nn[i*nq] = delta;
     }
 
@@ -280,6 +280,24 @@ type distanza(type *v, type *w, int D){ // ottimizzabile in assembly
     return distanza;
 }
 
+void insert_nn(int *id_nn_q, type *dist_nn_q, int v, type dist, int k){
+    // inserimento del vicino di indice v e della distanza approssimata di v da q
+
+    int indice_max = 0;
+    type max = dist_nn_q[0];
+
+    for(int i = 1; i < k; i++){
+    
+        if(dist_nn_q[i] > max){
+            max = dist_nn_q[i];
+            indice_max = i;
+        }
+    }
+    if(max > dist){
+        dist_nn_q[indice_max] = dist;
+        id_nn_q[indice_max] = v;
+    }
+}
 
 void querying(params *input, type *q, int q_index){
 
@@ -305,6 +323,12 @@ void querying(params *input, type *q, int q_index){
     }
 
     type *dist_nn_pivot = malloc(h*sizeof(type));   
+
+    if (input->k > input->h) {
+        fprintf(stderr, "Errore: k non può essere maggiore di h (k=%d, h=%d)\n", input->k, input->h);
+        exit(1);
+    }
+
     if(!dist_nn_pivot){
         fprintf(stderr, "Errore nell'allocazione del vettore per le distanze dai pivot in querying (dist_piv_q)\n");
         exit(1);
@@ -317,7 +341,7 @@ void querying(params *input, type *q, int q_index){
         type *pivot = DS + (size_t)indice_pivot * D;
         dist_nn_pivot[p] = approx_dist(pivot,q,D,x);
     }
-    
+
     for(int v = 0; v < N; v++){
 
         type lower_bound = 0.0;
@@ -333,28 +357,71 @@ void querying(params *input, type *q, int q_index){
         }
 
         // selezione del vicino a distanza maggiore
-        type dmax = dist_nn_pivot[k-1];
+        type dmax = dist_nn_q[0];
+        for (int i = 1; i < k; i++) {
+            if (dist_nn_q[i] > dmax)
+                dmax = dist_nn_q[i];
+        }
 
         if(lower_bound < dmax){
             type *v_vec = DS + (size_t)v*D;
             type dapp = approx_dist(v_vec,q,D,x);
             if (dmax > dapp){
-                insert_nn(); //TODO (da definire)
+                insert_nn(id_nn_q,dist_nn_q,v,dapp,k); //TODO (controllare l'inserimento in id_nn_q)
             }
         }
 
-        for(int i = 0; i < k; i++){
-            int id = id_nn_q[i];
-            if(id > 0){
-                type *v_vec = DS + (size_t)i * D;
-                type real_dist = distanza(q,v_vec, D); //TODO (da definire)
-                dist_nn_q[i] = real_dist;
-            }
+    }
+
+    // calcolo della distanza effettiva
+    for(int i = 0; i < k; i++){
+        int id = id_nn_q[i];
+        if(id >= 0){
+            type *v_vec = DS + (size_t)id * D;
+            type real_dist = distanza(q,v_vec, D); //TODO (controllare il calcolo)
+            dist_nn_q[i] = real_dist;
         }
     }
 
     free(dist_nn_pivot);
 
+}
+
+void stampa_vicini(params* input) {
+
+    // per ogni punto di query q, stampa i suoi k vicini
+    for (int i = 0; i < input->nq; i++) {
+        type* query     = input->Q       + (size_t)i * input->D;
+        int*  neighbours = input->id_nn  + (size_t)i * input->k;
+        type* distances  = input->dist_nn + (size_t)i * input->k;
+
+        printf("Per il punto: [");
+        for (int j = 0; j < input->D; j++) {
+            printf("%.3f", (double)query[j]);
+            if (j < input->D - 1)
+                printf(", ");
+        }
+        printf("]\n");
+
+        printf("I suoi %d vicini sono:\n", input->k);
+
+        for (int h = 0; h < input->k; h++) {
+            int id_vicino = neighbours[h];
+
+            // puntatore al punto del dataset corrispondente al vicino
+            type* punto = input->DS + (size_t)id_vicino * input->D;
+
+            printf("  vicino %d (id %d): [", h, id_vicino);
+            for (int j = 0; j < input->D; j++) {
+                printf("%.3f", (double)punto[j]);
+                if (j < input->D - 1)
+                    printf(", ");
+            }
+            printf("] a distanza: %.3f\n", (double)distances[h]);
+        }
+
+        printf("\n");
+    }
 }
 
 
@@ -366,7 +433,11 @@ void predict(params* input){
     prova(input);
     */
 
-    // allocare le strutture di interesse (id_nn, dist_nn, ...)
+    // TODO (allocare le strutture di interesse (id_nn, dist_nn, ...))
+
+    input->id_nn   = malloc((size_t)input->nq * input->k * sizeof(int));
+    input->dist_nn = _mm_malloc((size_t)input->nq * input->k * sizeof(type), align);
+    
 
     int nq = input->nq;
     int D = input->D;
@@ -380,10 +451,14 @@ void predict(params* input){
         querying(input,q,i);
     }
 
-    stampa_vicini(input); // TODO (DA DEFINIRE, stampa i KNN per ciascun punto di query q)
+    stampa_vicini(input); // TODO (controllare formattazione)
     
     if (!input->silent) {
         printf("PREDICT completato\n");
     }
 
+    free(input->id_nn);
+    _mm_free(input->dist_nn);
+
 }
+
