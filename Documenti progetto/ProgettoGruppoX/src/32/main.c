@@ -68,9 +68,9 @@ void save_data(char* filename, void* X, int n, int k) {
 		fwrite(&n, 4, 1, fp);
 		fwrite(&k, 4, 1, fp);
 		for (i = 0; i < n; i++) {
-			fwrite(X, sizeof(type), k, fp);
+			fwrite(X, sizeof(int), k, fp);
 			//printf("%i %i\n", ((int*)X)[0], ((int*)X)[1]);
-			X += sizeof(type)*k;
+			X += sizeof(int)*k;
 		}
 	}
 	else{
@@ -84,25 +84,26 @@ void save_data(char* filename, void* X, int n, int k) {
 int main(int argc, char** argv) {
 
 	// ================= Parametri di ingresso =================
-	char* dsfilename = "ds.ds2";
-	char* queryfilename = "query.ds2";
+	char* dsfilename = "../../../dataset_2000x256_32.ds2";
+	char* queryfilename = "../../../query_2000x256_32.ds2";
 	int h = 2;
-	int k = 3;
+	int k = 8;
 	int x = 2;
 	int silent = 0;
 	// =========================================================
 
 	params* input = malloc(sizeof(params));
 
+	input->k = k;
+	input->h = h;
+	input->x = x;
 	input->DS = load_data(dsfilename, &input->N, &input->D);
 	input->Q = load_data(queryfilename, &input->nq, &input->D);
 	input->id_nn = _mm_malloc(input->nq*input->k*sizeof(int), align);
 	input->dist_nn = _mm_malloc(input->nq*input->k*sizeof(type), align);
-	input->h = h;
-	input->k = k;
-	input->x = x;
 	input->silent = silent;
 
+	input->P = malloc(input->h*sizeof(type*));
 
 	clock_t t;
 	float time;
@@ -111,11 +112,11 @@ int main(int argc, char** argv) {
 	// =========================================================
 	fit(input);
 	// =========================================================
-	t = omp_get_wtime() - t;
+	t = omp_get_wtime(); //- t;
 	time = ((float)t)/CLOCKS_PER_SEC;
 
 	if(!input->silent)
-		printf("FIT time = %.5f secs\n", time);
+		printf("FIT time = %.10f secs\n", time);
 	else
 		printf("%.3f\n", time);
 
@@ -123,11 +124,11 @@ int main(int argc, char** argv) {
 	// =========================================================
 	predict(input);
 	// =========================================================
-	t = omp_get_wtime() - t;
+	t = omp_get_wtime(); //- t;
 	time = ((float)t)/CLOCKS_PER_SEC;
 
 	if(!input->silent)
-		printf("PREDICT time = %.5f secs\n", time);
+		printf("PREDICT time = %.10f secs\n", time);
 	else
 		printf("%.3f\n", time);
 
@@ -137,6 +138,7 @@ int main(int argc, char** argv) {
 	save_data(outname_id, input->id_nn, input->nq, input->k);
 	save_data(outname_k, input->dist_nn, input->nq, input->k);
 
+	/*
 	if(!input->silent){
 		for(int i=0; i<input->nq; i++){
 			printf("ID NN Q%3i: ( ", i);
@@ -151,6 +153,7 @@ int main(int argc, char** argv) {
 			printf(")\n");
 		}
 	}
+	*/
 
 	_mm_free(input->DS);
 	_mm_free(input->Q);
@@ -158,7 +161,9 @@ int main(int argc, char** argv) {
 	_mm_free(input->index);
 	_mm_free(input->id_nn);
 	_mm_free(input->dist_nn);
+	free(input->P);
 	free(input);
+	
 
 	return 0;
 }
